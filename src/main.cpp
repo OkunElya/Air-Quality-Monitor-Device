@@ -63,12 +63,12 @@ void buttonUpIsr()
   volatile unsigned long int t = millis();
   if (readBUP)
   {
-    if ((t - UpPressed) > 20)
+    if ((t - max(UpPressed,UpReleased)) > 20)
       UpReleased = t;
   }
   else
   {
-    if ((t - UpReleased) > 20)
+    if ((t -max(UpPressed,UpReleased) ) > 20)
       UpPressed = t;
     // buton is pressed
   }
@@ -93,12 +93,12 @@ void buttonCenterIsr()
   volatile unsigned long int t = millis();
   if (readBCE)
   {
-    if ((t - CenterPressed) > 20)
+    if ((t - max(CenterPressed,CenterReleased)) > 20)
       CenterReleased = t;
   }
   else
   {
-    if ((t - CenterReleased) > 20)
+    if ((t - max(CenterPressed,CenterReleased)) > 20)
       CenterPressed = t;
     // buton is pressed
   }
@@ -122,12 +122,12 @@ void buttonDownIsr()
   volatile unsigned long int t = millis();
   if (readBDW)
   {
-    if ((t - DownPressed) > 20)
+    if ((t - max(DownPressed,DownReleased)) > 20)
       DownReleased = t;
   }
   else
   {
-    if ((t - DownReleased) > 20)
+    if ((t - max(DownPressed,DownReleased)) > 20)
       DownPressed = t;
     // buton is pressed
   }
@@ -577,6 +577,7 @@ void PMScreen()
   display.display();
   display.clearDisplay();
 }
+
 void mainScreen()
 {
   display.setFont();
