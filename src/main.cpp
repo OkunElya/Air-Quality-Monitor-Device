@@ -13,10 +13,10 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
-//CONFIG PART
+// CONFIG PART
 #define DEBOUNCE_MS 50
-#define SCD_TEMP_OFFSET 2.0f //positine in degrees
-#define SCD_MEASURMENT_INTERVAL 15 //in seconds
+#define SCD_TEMP_OFFSET 2.0f       // positine in degrees
+#define SCD_MEASURMENT_INTERVAL 15 // in seconds
 // DEVICES PART
 //  I2C device at address 0x3C display
 #define SCREEN_WIDTH 128
@@ -225,6 +225,7 @@ void simpleTextDisp(const char text[])
 void updateDisp();
 void mainScreen();
 void scdBmpScreen();
+void CalibScreen();
 void PMScreen();
 
 void setup()
@@ -271,12 +272,14 @@ void setup()
       ;
   }
 
-  if(scd30.getTemperatureOffset()!=(uint16_t)(SCD_TEMP_OFFSET*100)){
-    if (!scd30.setTemperatureOffset((uint16_t)(SCD_TEMP_OFFSET*100)))
+  if (scd30.getTemperatureOffset() != (uint16_t)(SCD_TEMP_OFFSET * 100))
+  {
+    if (!scd30.setTemperatureOffset((uint16_t)(SCD_TEMP_OFFSET * 100)))
     {
       Serial.println("Failed to set scd parameters");
       simpleTextDisp("scd temp offset \nset fail!");
-      for (;;);
+      for (;;)
+        ;
     }
     Serial.print("Updated offset to: ");
     Serial.println(SCD_TEMP_OFFSET);
@@ -288,7 +291,8 @@ void setup()
     {
       Serial.println("Failed to set measurement interval");
       simpleTextDisp("scd interval \nset fail!");
-      for (;;);
+      for (;;)
+        ;
     }
     Serial.print("Updated measurement interval to: ");
     Serial.println(SCD_MEASURMENT_INTERVAL);
@@ -303,14 +307,15 @@ void setup()
   Serial.println(scdAltitude);
 
   // Compare altitudes and adjust if the difference is significant
-  if (abs(bmpAltitude - scdAltitude) > 50) 
+  if (abs(bmpAltitude - scdAltitude) > 50)
   {
     Serial.println("Significant altitude deviation detected. Adjusting SCD altitude...");
-    if (!scd30.setAltitudeOffset((uint16_t)bmpAltitude)) 
+    if (!scd30.setAltitudeOffset((uint16_t)bmpAltitude))
     {
       Serial.println("Failed to adjust SCD altitude.");
       simpleTextDisp("SCD altitude adj. fail!");
-      for (;;);
+      for (;;)
+        ;
     }
     else
     {
@@ -318,10 +323,9 @@ void setup()
     }
   }
 
-
   simpleTextDisp("SCD warming up...");
-  
-  for (int i = 0; i <= 120; i++) // Loop for 120 seconds
+
+  for (int i = 0; i <= 3; i++) // Loop for 120 seconds
   {
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -517,8 +521,13 @@ void updateBLEValues()
 
 void updateDisp()
 {
-
-  if (bup())
+  long unsigned int upPressLen = bup();
+  if (upPressLen > 1000)
+  {
+    // enter calibration menu
+    CalibScreen();
+  }
+  else if (upPressLen)
   {
     currentMenu--;
     if (currentMenu < 0)
@@ -656,8 +665,68 @@ void PMScreen()
 
 void CalibScreen()
 {
+  int currentSelection = 0;
+  int itemCount = 2;
+  int textHeight = 8;
 
+  while (true)
+  {
+    long unsigned int btnPressTime = bce();
+    if (btnPressTime > 3000)
+    {
+      break; // exit from the calibration
+    }
 
+    display.setFont(); // reset to default font
+    display.setCursor(20, 0);
+    display.print("Calibration Screen");
+
+    display.setCursor(0, 8);
+    display.print("Autocalib:");
+    display.print(scd30.selfCalibrationEnabled() ? "enabled" : "disabled");
+    display.setCursor(0, 16);
+    display.print("Force calib wisard");
+    display.setCursor(0, 56);
+    display.print("Curr force ref:");
+    display.print(scd30.getForcedCalibrationReference());
+
+    if (btnPressTime)
+    {
+      switch (currentSelection)
+      {
+      case 0:
+        scd30.selfCalibrationEnabled(!scd30.selfCalibrationEnabled());
+        break;
+      case 1:
+        while (true)
+        {
+          long unsigned int btnPressTime = bce();
+          if (btnPressTime > 3000)
+          {
+            break; // exit from the calibration
+          }
+        }
+        break;
+      default:
+        break;
+      }
+    }
+
+    int yOffset = (currentSelection + 1) * textHeight;
+    display.fillRect(0, yOffset, display.width(), textHeight, SSD1306_INVERSE); // Use color invert
+
+    if (bup())
+    {
+      currentSelection = (currentSelection + itemCount - 1) % itemCount;
+    }
+    if (bdw())
+    {
+      currentSelection = (currentSelection + 1) % itemCount;
+    }
+
+    display.display();
+    display.clearDisplay();
+  }
   display.display();
   display.clearDisplay();
 }
