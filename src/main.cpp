@@ -43,71 +43,81 @@ void updatePMS();
 void updateSensors();
 void updateBLEValues();
 // buttons
-#define PRESS_BUFF_LEN 10
-volatile char presses[PRESS_BUFF_LEN];
 #define B_UP 25
 #define B_CE 26
 #define B_DW 27
 #define readBUP bitRead(GPIO.in, B_UP) // faster than digitalRead()
 #define readBCE bitRead(GPIO.in, B_CE) // faster than digitalRead()
 #define readBDW bitRead(GPIO.in, B_DW) // faster than digitalRead()
+
+#define DEBOUNCE_MS 50
 volatile unsigned long int UpPressed = 0;
 volatile unsigned long int UpReleased = 0;
+volatile unsigned long int UpUpdated = 0;
 volatile unsigned long int CenterPressed = 0;
 volatile unsigned long int CenterReleased = 0;
+volatile unsigned long int CenterUpdated = 0;
 volatile unsigned long int DownPressed = 0;
 volatile unsigned long int DownReleased = 0;
+volatile unsigned long int DownUpdated = 0;
 
-void buttonUpIsr()
+volatile long unsigned int dispLastUsed = 1;
+
+void IRAM_ATTR buttonUpIsr()
 {
-  volatile unsigned long int t = millis();
-  if (readBUP)
-  {
-    if ((t - max(UpPressed,UpReleased)) > 20)
-      UpReleased = t;
-  }
-  else
-  {
-    if ((t -max(UpPressed,UpReleased) ) > 20)
-      UpPressed = t;
-    // buton is pressed
-  }
+  UpUpdated=millis();
 }
+
 long unsigned int bup() // function to use in button checks, returns press length
 {
-  if ((UpPressed == 0) || ((millis() - UpPressed) < 20))
+  if(UpUpdated==0)
     return 0;
-  if ((UpReleased != 0 && (UpPressed < UpReleased)) || readBUP)
+  if (millis()-UpUpdated < DEBOUNCE_MS)
+    return 0;//jitter ignore
+  if(!readBUP){
+    UpPressed=millis();
+    UpUpdated=0;
+    return 0;//button is pressed, ignore
+  }
+  else{
+    UpUpdated=0;
+    UpReleased=millis();
+  }
+
+  if ((UpReleased != 0 && UpReleased!=0) && (UpPressed < UpReleased))
   {
     long unsigned int retVal = UpReleased - UpPressed;
     UpPressed = 0;
     UpReleased = 0;
     return retVal;
   }
-
   return 0;
 }
 
-void buttonCenterIsr()
+void IRAM_ATTR buttonCenterIsr()
 {
-  volatile unsigned long int t = millis();
-  if (readBCE)
+  CenterUpdated = millis();
+}
+
+long unsigned int bce() // function to use in button checks, returns press length
+{
+  if (CenterUpdated == 0)
+    return 0;
+  if (millis() - CenterUpdated < DEBOUNCE_MS)
+    return 0; // jitter ignore
+  if (!readBCE)
   {
-    if ((t - max(CenterPressed,CenterReleased)) > 20)
-      CenterReleased = t;
+    CenterPressed = millis();
+    CenterUpdated = 0;
+    return 0; // button is pressed, ignore
   }
   else
   {
-    if ((t - max(CenterPressed,CenterReleased)) > 20)
-      CenterPressed = t;
-    // buton is pressed
+    CenterUpdated = 0;
+    CenterReleased = millis();
   }
-}
-long unsigned int bce()
-{
-  if ((CenterPressed == 0) || ((millis() - CenterPressed) < 20))
-    return 0;
-  if ((CenterReleased != 0 && (CenterPressed < CenterReleased)) || readBCE)
+
+  if ((CenterReleased != 0 && CenterReleased != 0) && (CenterPressed < CenterReleased))
   {
     long unsigned int retVal = CenterReleased - CenterPressed;
     CenterPressed = 0;
@@ -117,26 +127,30 @@ long unsigned int bce()
   return 0;
 }
 
-void buttonDownIsr()
+void IRAM_ATTR buttonDownIsr()
 {
-  volatile unsigned long int t = millis();
-  if (readBDW)
+  DownUpdated = millis();
+}
+
+long unsigned int bdw() // function to use in button checks, returns press length
+{
+  if (DownUpdated == 0)
+    return 0;
+  if (millis() - DownUpdated < DEBOUNCE_MS)
+    return 0; // jitter ignore
+  if (!readBDW)
   {
-    if ((t - max(DownPressed,DownReleased)) > 20)
-      DownReleased = t;
+    DownPressed = millis();
+    DownUpdated = 0;
+    return 0; // button is pressed, ignore
   }
   else
   {
-    if ((t - max(DownPressed,DownReleased)) > 20)
-      DownPressed = t;
-    // buton is pressed
+    DownUpdated = 0;
+    DownReleased = millis();
   }
-}
-long unsigned int bdw()
-{
-  if ((DownPressed == 0) || ((millis() - DownPressed) < 20))
-    return 0;
-  if ((DownReleased != 0 && (DownPressed < DownReleased)) || readBDW)
+
+  if ((DownReleased != 0 && DownReleased != 0) && (DownPressed < DownReleased))
   {
     long unsigned int retVal = DownReleased - DownPressed;
     DownPressed = 0;
@@ -193,7 +207,6 @@ MyServerCallbacks bleCallbacks;
 
 // DISPALY PART
 #define TIME_BEFORE_DIMMING 15000
-long unsigned int dispLastUsed = 1;
 bool keepDisplayOn=false;
 int currentMenu = 0;
 void simpleTextDisp(const char text[])
@@ -321,8 +334,8 @@ void setup()
 
 void loop()
 {
-  updateSensors();
-  updateBLEValues();
+  // updateSensors();
+  // updateBLEValues();
   updateDisp();
 }
 
@@ -440,27 +453,20 @@ void updateBLEValues()
 void updateDisp()
 {
   display.setFont(); // reset to default font
+  display.setCursor(120, 0);
   if (deviceConnected)
   {
-    display.setCursor(120, 0);
     display.print("O");
   }
   else
   {
-    display.setCursor(120, 0);
     display.print("X");
   }
   if((!keepDisplayOn)&&((millis()-dispLastUsed)>TIME_BEFORE_DIMMING))//if display is disabled
   {
-    if(bup()||bce()||bdw()){
-      dispLastUsed=millis();
-    }
-    else{
-      display.clearDisplay();
-      display.display();
-      return;
-    }
-
+    display.clearDisplay();
+    display.display();
+    return;
   }
 
 
@@ -498,8 +504,11 @@ void updateDisp()
   }
 
   long unsigned int pressLen=bce();//long press (>1000ms) to enable constant display
+
   if (pressLen)
   {
+    Serial.print("Press length: ");
+    Serial.println(pressLen);
     dispLastUsed=millis();
     if(pressLen<1000){
       currentMenu = 0;
@@ -539,7 +548,47 @@ void scdBmpScreen()
   display.display();
   display.clearDisplay();
 }
+
 void PMScreen()
+{
+  display.setFont(); // reset to default font
+  display.setCursor(0, 0);
+  display.print(" Particles:[ug/m3]");
+  display.print("\n");
+  display.print("PM 1.0: ");
+  display.print(pms.pm01);
+  display.print("\n");
+
+  display.print("PM 2.5: ");
+  display.print(pms.pm25);
+  display.print("\n");
+
+  display.print("PM 10.0: ");
+  display.print(pms.pm10);
+
+  // conc
+
+  display.print("\n Number conc [cc] \n");
+  display.print("N0.3:");
+  display.print(pms.n0p3);
+  display.print(" 0.5:");
+  display.print(pms.n0p5);
+
+  display.print("\n 1.0: ");
+  display.print(pms.n1p0);
+  display.print(" 2.5:");
+  display.print(pms.n2p5);
+
+  display.print("\n 5.0: ");
+  display.print(pms.n5p0);
+  display.print(" 10:");
+  display.print(pms.n10p0);
+
+  display.display();
+  display.clearDisplay();
+}
+
+void CalibScreen()
 {
   display.setFont(); // reset to default font
   display.setCursor(0, 0);
