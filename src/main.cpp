@@ -334,8 +334,8 @@ void setup()
 
 void loop()
 {
-  // updateSensors();
-  // updateBLEValues();
+  updateSensors();
+  updateBLEValues();
   updateDisp();
 }
 
@@ -452,39 +452,8 @@ void updateBLEValues()
 
 void updateDisp()
 {
-  display.setFont(); // reset to default font
-  display.setCursor(120, 0);
-  if (deviceConnected)
-  {
-    display.print("O");
-  }
-  else
-  {
-    display.print("X");
-  }
-  if((!keepDisplayOn)&&((millis()-dispLastUsed)>TIME_BEFORE_DIMMING))//if display is disabled
-  {
-    display.clearDisplay();
-    display.display();
-    return;
-  }
 
-
-  switch (currentMenu)
-  {
-  case 0:
-    mainScreen();
-    break;
-  case 1:
-    scdBmpScreen();
-    break;
-  case 2:
-    PMScreen();
-    break;
-  default:
-    break;
-  }
-
+  
  
   if (bup())
   {
@@ -518,6 +487,39 @@ void updateDisp()
       simpleTextDisp(keepDisplayOn? "dimming:false":"dimming:true");
       delay(500);
     }
+  }
+
+  display.setFont(); // reset to default font
+  display.setCursor(120, 0);
+  if (deviceConnected)
+  {
+    display.print("O");
+  }
+  else
+  {
+    display.print("X");
+  }
+  if((!keepDisplayOn)&&((millis()-dispLastUsed)>TIME_BEFORE_DIMMING))//if display is disabled
+  {
+    display.clearDisplay();
+    display.display();
+    return;
+  }
+
+
+  switch (currentMenu)
+  {
+  case 0:
+    mainScreen();
+    break;
+  case 1:
+    scdBmpScreen();
+    break;
+  case 2:
+    PMScreen();
+    break;
+  default:
+    break;
   }
 }
 
