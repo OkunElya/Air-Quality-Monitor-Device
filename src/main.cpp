@@ -325,7 +325,7 @@ void setup()
 
   simpleTextDisp("SCD warming up...");
 
-  for (int i = 0; i <= 3; i++) // Loop for 120 seconds
+  for (int i = 0; i <= 120; i++) // Loop for 120 seconds
   {
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -687,7 +687,7 @@ void CalibScreen()
     display.setCursor(0, 16);
     display.print("Force calib wisard");
     display.setCursor(0, 56);
-    display.print("Curr force ref:");
+    display.print("Last force ref:");
     display.print(scd30.getForcedCalibrationReference());
 
     if (btnPressTime)
@@ -698,15 +698,87 @@ void CalibScreen()
         scd30.selfCalibrationEnabled(!scd30.selfCalibrationEnabled());
         break;
       case 1:
+      {
+        int realPPM = 0;
+        int currentNum = 0;
+        int digitCounter = 0;
         while (true)
         {
-          long unsigned int btnPressTime = bce();
-          if (btnPressTime > 3000)
+
+          long unsigned int bcet = bce();
+          if (bcet > 3000)
           {
+            simpleTextDisp("wait before calib:");
+
+            for (int i = 0; i <= 120; i++) // Loop for 120 seconds
+            {
+              display.clearDisplay();
+              display.setCursor(0, 0);
+              display.print("CALIBRATION WAIT");
+              display.setCursor(0, 16);
+              display.print("Progress: ");
+              display.print(i);
+              display.print(" / 120 sec");
+              display.display();
+              delay(1000); // Wait for 1 second
+            }
+            bool resp = scd30.forceRecalibrationWithReference(realPPM);
+            if (resp)
+            {
+              simpleTextDisp("Calibration successful!");
+            }
+            else
+            {
+              simpleTextDisp("Calibration failed!");
+            }
+            delay(1000);
+            while (!bce())
+              ;
             break; // exit from the calibration
           }
+          display.setCursor(10, 0);
+          display.print("Input current PPM");
+
+          display.setCursor(0, 25);
+          display.print((realPPM*10)+currentNum);
+          display.fillRect((digitCounter+1) * 7, 25, 7, 10, SSD1306_INVERSE); // Highlight current digit
+          display.display();
+          display.clearDisplay();
+
+
+          auto bupt = bup();
+          auto bdwt = bdw();
+          if (max(bupt, bdwt) > 3000)
+          {
+            simpleTextDisp("Canceled!");
+            delay(1000);
+            break;
+          }
+
+          if (bupt)
+          {
+            currentNum = (currentNum + 1) % 10;
+          }
+          if (bdwt)
+          {
+            currentNum = (currentNum + 9) % 10;
+          }
+          if (bcet)
+          {
+            realPPM *= 10;
+            realPPM += currentNum;
+            if (realPPM > 2000 || realPPM < 0)
+            {
+              simpleTextDisp("Bad number for ref!");
+              delay(1000);
+              break;
+            }
+            digitCounter++;
+            currentNum = 0;
+          }
         }
-        break;
+      }
+      break;
       default:
         break;
       }
