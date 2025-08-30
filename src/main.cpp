@@ -13,6 +13,10 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+//CONFIG PART
+#define DEBOUNCE_MS 50
+#define SCD_TEMP_OFFSET 2.0f //positine in degrees
+#define SCD_MEASURMENT_INTERVAL 15 //in seconds
 // DEVICES PART
 //  I2C device at address 0x3C display
 #define SCREEN_WIDTH 128
@@ -50,7 +54,6 @@ void updateBLEValues();
 #define readBCE bitRead(GPIO.in, B_CE) // faster than digitalRead()
 #define readBDW bitRead(GPIO.in, B_DW) // faster than digitalRead()
 
-#define DEBOUNCE_MS 50
 volatile unsigned long int UpPressed = 0;
 volatile unsigned long int UpReleased = 0;
 volatile unsigned long int UpUpdated = 0;
@@ -65,26 +68,28 @@ volatile long unsigned int dispLastUsed = 1;
 
 void IRAM_ATTR buttonUpIsr()
 {
-  UpUpdated=millis();
+  UpUpdated = millis();
 }
 
 long unsigned int bup() // function to use in button checks, returns press length
 {
-  if(UpUpdated==0)
+  if (UpUpdated == 0)
     return 0;
-  if (millis()-UpUpdated < DEBOUNCE_MS)
-    return 0;//jitter ignore
-  if(!readBUP){
-    UpPressed=millis();
-    UpUpdated=0;
-    return 0;//button is pressed, ignore
+  if (millis() - UpUpdated < DEBOUNCE_MS)
+    return 0; // jitter ignore
+  if (!readBUP)
+  {
+    UpPressed = millis();
+    UpUpdated = 0;
+    return 0; // button is pressed, ignore
   }
-  else{
-    UpUpdated=0;
-    UpReleased=millis();
+  else
+  {
+    UpUpdated = 0;
+    UpReleased = millis();
   }
 
-  if ((UpReleased != 0 && UpReleased!=0) && (UpPressed < UpReleased))
+  if ((UpReleased != 0 && UpReleased != 0) && (UpPressed < UpReleased))
   {
     long unsigned int retVal = UpReleased - UpPressed;
     UpPressed = 0;
@@ -205,9 +210,9 @@ class MyServerCallbacks : public BLEServerCallbacks // copied somewhere
 };
 MyServerCallbacks bleCallbacks;
 
-// DISPALY PART
+// DISPLAY PART
 #define TIME_BEFORE_DIMMING 15000
-bool keepDisplayOn=false;
+bool keepDisplayOn = false;
 int currentMenu = 0;
 void simpleTextDisp(const char text[])
 {
@@ -266,6 +271,69 @@ void setup()
       ;
   }
 
+  if(scd30.getTemperatureOffset()!=(uint16_t)(SCD_TEMP_OFFSET*100)){
+    if (!scd30.setTemperatureOffset((uint16_t)(SCD_TEMP_OFFSET*100)))
+    {
+      Serial.println("Failed to set scd parameters");
+      simpleTextDisp("scd temp offset \nset fail!");
+      for (;;);
+    }
+    Serial.print("Updated offset to: ");
+    Serial.println(SCD_TEMP_OFFSET);
+  }
+
+  if (scd30.getMeasurementInterval() != SCD_MEASURMENT_INTERVAL)
+  {
+    if (!scd30.setMeasurementInterval(SCD_MEASURMENT_INTERVAL))
+    {
+      Serial.println("Failed to set measurement interval");
+      simpleTextDisp("scd interval \nset fail!");
+      for (;;);
+    }
+    Serial.print("Updated measurement interval to: ");
+    Serial.println(SCD_MEASURMENT_INTERVAL);
+  }
+
+  float bmpAltitude = bmp.readAltitude();
+  Serial.print("Current BMP altitude: ");
+  Serial.println(bmpAltitude);
+
+  float scdAltitude = scd30.getAltitudeOffset();
+  Serial.print("Current SCD altitude: ");
+  Serial.println(scdAltitude);
+
+  // Compare altitudes and adjust if the difference is significant
+  if (abs(bmpAltitude - scdAltitude) > 50) 
+  {
+    Serial.println("Significant altitude deviation detected. Adjusting SCD altitude...");
+    if (!scd30.setAltitudeOffset((uint16_t)bmpAltitude)) 
+    {
+      Serial.println("Failed to adjust SCD altitude.");
+      simpleTextDisp("SCD altitude adj. fail!");
+      for (;;);
+    }
+    else
+    {
+      Serial.println("SCD altitude adjustment successful.");
+    }
+  }
+
+
+  simpleTextDisp("SCD warming up...");
+  
+  for (int i = 0; i <= 120; i++) // Loop for 120 seconds
+  {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("SCD warming up...");
+    display.setCursor(0, 16);
+    display.print("Progress: ");
+    display.print(i);
+    display.print(" / 120 sec");
+    display.display();
+    delay(1000); // Wait for 1 second
+  }
+  simpleTextDisp("SCD warmup complete.");
   simpleTextDisp("PMS init..");
   pms.init();
   // delay(1000);
@@ -281,10 +349,7 @@ void setup()
 
   display.clearDisplay();
   display.ssd1306_command(SSD1306_SETCONTRAST); // 0x81
-  display.ssd1306_command(2);//dimming disaply to prevent burnout
-
-  scd30.setMeasurementInterval(15); //
-  scd30.read();
+  display.ssd1306_command(2);                   // dimming disaply to prevent burnout
 
   simpleTextDisp("BLE init...");
   BLEDevice::init("Air Quality Monitor");
@@ -453,8 +518,6 @@ void updateBLEValues()
 void updateDisp()
 {
 
-  
- 
   if (bup())
   {
     currentMenu--;
@@ -472,19 +535,21 @@ void updateDisp()
     }
   }
 
-  long unsigned int pressLen=bce();//long press (>1000ms) to enable constant display
+  long unsigned int pressLen = bce(); // long press (>1000ms) to enable constant display
 
   if (pressLen)
   {
     Serial.print("Press length: ");
     Serial.println(pressLen);
-    dispLastUsed=millis();
-    if(pressLen<1000){
+    dispLastUsed = millis();
+    if (pressLen < 1000)
+    {
       currentMenu = 0;
     }
-    else{
-      keepDisplayOn=!keepDisplayOn;
-      simpleTextDisp(keepDisplayOn? "dimming:false":"dimming:true");
+    else
+    {
+      keepDisplayOn = !keepDisplayOn;
+      simpleTextDisp(keepDisplayOn ? "dimming:false" : "dimming:true");
       delay(500);
     }
   }
@@ -499,13 +564,12 @@ void updateDisp()
   {
     display.print("X");
   }
-  if((!keepDisplayOn)&&((millis()-dispLastUsed)>TIME_BEFORE_DIMMING))//if display is disabled
+  if ((!keepDisplayOn) && ((millis() - dispLastUsed) > TIME_BEFORE_DIMMING)) // if display is disabled
   {
     display.clearDisplay();
     display.display();
     return;
   }
-
 
   switch (currentMenu)
   {
@@ -592,38 +656,7 @@ void PMScreen()
 
 void CalibScreen()
 {
-  display.setFont(); // reset to default font
-  display.setCursor(0, 0);
-  display.print(" Particles:[ug/m3]");
-  display.print("\n");
-  display.print("PM 1.0: ");
-  display.print(pms.pm01);
-  display.print("\n");
 
-  display.print("PM 2.5: ");
-  display.print(pms.pm25);
-  display.print("\n");
-
-  display.print("PM 10.0: ");
-  display.print(pms.pm10);
-
-  // conc
-
-  display.print("\n Number conc [cc] \n");
-  display.print("N0.3:");
-  display.print(pms.n0p3);
-  display.print(" 0.5:");
-  display.print(pms.n0p5);
-
-  display.print("\n 1.0: ");
-  display.print(pms.n1p0);
-  display.print(" 2.5:");
-  display.print(pms.n2p5);
-
-  display.print("\n 5.0: ");
-  display.print(pms.n5p0);
-  display.print(" 10:");
-  display.print(pms.n10p0);
 
   display.display();
   display.clearDisplay();
