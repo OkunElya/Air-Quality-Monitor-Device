@@ -706,42 +706,13 @@ void CalibScreen()
         {
 
           long unsigned int bcet = bce();
-          if (bcet > 3000)
-          {
-            simpleTextDisp("wait before calib:");
-
-            for (int i = 0; i <= 120; i++) // Loop for 120 seconds
-            {
-              display.clearDisplay();
-              display.setCursor(0, 0);
-              display.print("CALIBRATION WAIT");
-              display.setCursor(0, 16);
-              display.print("Progress: ");
-              display.print(i);
-              display.print(" / 120 sec");
-              display.display();
-              delay(1000); // Wait for 1 second
-            }
-            bool resp = scd30.forceRecalibrationWithReference(realPPM);
-            if (resp)
-            {
-              simpleTextDisp("Calibration successful!");
-            }
-            else
-            {
-              simpleTextDisp("Calibration failed!");
-            }
-            delay(1000);
-            while (!bce())
-              ;
-            break; // exit from the calibration
-          }
+          
           display.setCursor(10, 0);
           display.print("Input current PPM");
 
           display.setCursor(0, 25);
           display.print((realPPM*10)+currentNum);
-          display.fillRect((digitCounter+1) * 7, 25, 7, 10, SSD1306_INVERSE); // Highlight current digit
+          display.fillRect((digitCounter) * 7, 25, 7, 10, SSD1306_INVERSE); // Highlight current digit
           display.display();
           display.clearDisplay();
 
@@ -775,6 +746,36 @@ void CalibScreen()
             }
             digitCounter++;
             currentNum = 0;
+          }
+          if (bcet > 3000)
+          {
+            simpleTextDisp("wait before calib:");
+
+            for (int i = 0; i <= 120; i++) // Loop for 120 seconds
+            {
+              display.clearDisplay();
+              display.setCursor(0, 0);
+              display.print("CALIBRATION WAIT");
+              display.setCursor(0, 16);
+              display.print("Progress: ");
+              display.print(i);
+              display.print(" / 120 sec");
+              display.display();
+              delay(1000); // Wait for 1 second
+            }
+            bool resp = scd30.forceRecalibrationWithReference(realPPM);
+            if (resp)
+            {
+              simpleTextDisp("Calibration successful!");
+            }
+            else
+            {
+              simpleTextDisp("Calibration failed!");
+            }
+            delay(1000);
+            while (!bce())
+              ;
+            break; // exit from the calibration
           }
         }
       }
